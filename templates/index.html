@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>MLB Arbitrage Trader</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -21,8 +22,21 @@
         }
 
         .container {
-            max-width: 600px;
+            max-width: 1400px;
             margin: 0 auto;
+        }
+
+        .two-column-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 1024px) {
+            .two-column-layout {
+                grid-template-columns: 1fr;
+            }
         }
 
         .header {
@@ -147,6 +161,68 @@
             margin-bottom: 10px;
         }
 
+        .btn-sizing {
+            background: #374151;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-sizing:hover {
+            background: #4b5563;
+        }
+
+        .btn-sizing:active {
+            transform: scale(0.95);
+        }
+
+        .ticker-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            margin-top: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .ticker-item {
+            padding: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #2a2a2a;
+            transition: background 0.15s;
+        }
+
+        .ticker-item:hover {
+            background: #2a2a2a;
+        }
+
+        .ticker-item:last-child {
+            border-bottom: none;
+        }
+
+        .ticker-code {
+            font-weight: bold;
+            color: #3b82f6;
+            font-size: 14px;
+        }
+
+        .ticker-title {
+            font-size: 12px;
+            color: #888;
+            margin-top: 3px;
+        }
+
         .trading-section {
             display: none;
         }
@@ -238,13 +314,70 @@
             padding: 10px;
             color: #888;
         }
+
+        .price-chart-container {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .chart-title {
+            font-size: 14px;
+            color: #3b82f6;
+            font-weight: bold;
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 5px;
+        }
+
+        .chart-btn {
+            padding: 5px 10px;
+            font-size: 11px;
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .chart-btn.active {
+            background: #3b82f6;
+            border-color: #3b82f6;
+        }
+
+        #priceChart {
+            max-height: 300px;
+        }
+
+        #volumeChart {
+            max-height: 200px;
+        }
+
+        @media (max-width: 1024px) {
+            #priceChart {
+                max-height: 250px;
+            }
+            #volumeChart {
+                max-height: 150px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>⚾ MLB Arbitrage</h1>
-            <div style="font-size: 14px; opacity: 0.9;">Latency Trading System</div>
+            <h1> aria is a fatass</h1>
+            <div style="font-size: 14px; opacity: 0.9;">aria is fat</div>
         </div>
 
         <!-- Status Bar -->
@@ -263,11 +396,29 @@
             </div>
         </div>
 
+        <!-- Active Market Display -->
+        <div id="active-market-banner" style="display: none; background: linear-gradient(135deg, #059669 0%, #10b981 100%); padding: 12px 15px; border-radius: 10px; margin-bottom: 15px;">
+            <div style="font-size: 11px; color: rgba(255,255,255,0.8); text-transform: uppercase; margin-bottom: 3px;">Active Market</div>
+            <div style="font-size: 16px; font-weight: bold; color: white; margin-bottom: 2px;" id="active-ticker">—</div>
+            <div style="font-size: 12px; color: rgba(255,255,255,0.9);" id="active-market-title">—</div>
+        </div>
+
         <!-- Setup Section -->
         <div class="setup-section" id="setup-section">
             <h3>🔧 Setup</h3>
             <button class="btn-primary" onclick="authenticate()">1. Authenticate to Kalshi</button>
-            <input type="text" id="ticker-input" placeholder="Market Ticker (e.g., KXMLB-24NY-B)" style="margin-top: 10px;">
+
+            <div style="margin-top: 10px; position: relative;">
+                <input
+                    type="text"
+                    id="ticker-input"
+                    placeholder="Search market ticker (e.g., KXMLB)"
+                    autocomplete="off"
+                    oninput="searchTickers()"
+                    style="width: 100%; padding-right: 40px;">
+                <div id="ticker-results" class="ticker-dropdown" style="display: none;"></div>
+            </div>
+
             <button class="btn-primary" onclick="setTicker()">2. Set Market Ticker</button>
         </div>
 
@@ -276,67 +427,391 @@
 
         <!-- Trading Section -->
         <div class="trading-section" id="trading-section">
-            <!-- Price Display -->
-            <div class="price-display">
-                <div class="price-box">
-                    <div class="price-label">YES</div>
-                    <div class="price-value yes-price" id="yes-price">—</div>
+            <div class="two-column-layout">
+                <!-- LEFT COLUMN: Trading Controls -->
+                <div class="left-column">
+                    <!-- Price Display -->
+                    <div class="price-display">
+                        <div class="price-box">
+                            <div class="price-label">YES</div>
+                            <div class="price-value yes-price" id="yes-price">—</div>
+                        </div>
+                        <div class="price-box">
+                            <div class="price-label">NO</div>
+                            <div class="price-value no-price" id="no-price">—</div>
+                        </div>
+                    </div>
+
+                    <!-- Contract Size Input -->
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #888;">Contract Size</label>
+                        <input type="number" id="contract-size" value="100" min="1" max="100000" style="width: 100%; padding: 15px; font-size: 20px; font-weight: bold; text-align: center;">
+
+                        <!-- Bet Sizing Buttons -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-top: 10px;">
+                            <button class="btn-sizing" onclick="setBetSize(0.25)">1/4</button>
+                            <button class="btn-sizing" onclick="setBetSize(0.5)">1/2</button>
+                            <button class="btn-sizing" onclick="setBetSize(0.75)">3/4</button>
+                            <button class="btn-sizing" onclick="setBetSize(0.9)">MAX</button>
+                        </div>
+                        <div style="font-size: 11px; color: #666; text-align: center; margin-top: 5px;">
+                            Quick bet sizing based on balance & price
+                        </div>
+                    </div>
+
+                    <!-- Trade Buttons -->
+                    <div class="trade-buttons">
+                        <button class="btn-buy-yes" onclick="executeTrade('yes', 'buy')">
+                            BUY YES
+                        </button>
+                        <button class="btn-buy-no" onclick="executeTrade('no', 'buy')">
+                            BUY NO
+                        </button>
+                        <button class="btn-sell" onclick="executeTrade('yes', 'sell')">
+                            SELL YES
+                        </button>
+                        <button class="btn-sell" onclick="executeTrade('no', 'sell')">
+                            SELL NO
+                        </button>
+                    </div>
+
+                    <button class="btn-danger" onclick="resetSession()">Reset Session</button>
                 </div>
-                <div class="price-box">
-                    <div class="price-label">NO</div>
-                    <div class="price-value no-price" id="no-price">—</div>
+
+                <!-- RIGHT COLUMN: Stats & Chart -->
+                <div class="right-column">
+                    <!-- Execution Stats -->
+                    <div class="execution-stats">
+                        <h3 style="margin-bottom: 10px; font-size: 14px; color: #3b82f6;">Session Stats</h3>
+                        <div class="stat-row">
+                            <span>Trades:</span>
+                            <span id="total-trades">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Avg Latency:</span>
+                            <span id="avg-latency">—</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Fastest:</span>
+                            <span id="fastest">—</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Slowest:</span>
+                            <span id="slowest">—</span>
+                        </div>
+                    </div>
+
+                    <!-- Price Chart -->
+                    <div class="price-chart-container">
+                        <div class="chart-header">
+                            <div class="chart-title">Price Movement</div>
+                            <div class="chart-controls">
+                                <button class="chart-btn active" onclick="setChartTimeframe(60)">1m</button>
+                                <button class="chart-btn" onclick="setChartTimeframe(300)">5m</button>
+                                <button class="chart-btn" onclick="setChartTimeframe(900)">15m</button>
+                                <button class="chart-btn" onclick="setChartTimeframe(1800)">30m</button>
+                            </div>
+                        </div>
+                        <canvas id="priceChart"></canvas>
+                    </div>
+
+                    <!-- Position Volume Display -->
+                    <div class="price-chart-container" style="margin-top: 15px;">
+                        <div class="chart-header">
+                            <div class="chart-title">Position Volume</div>
+                            <div style="font-size: 11px; color: #888;">Contracts Held</div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 20px;">
+                            <div style="background: rgba(16, 185, 129, 0.15); border: 2px solid #10b981; border-radius: 10px; padding: 20px; text-align: center;">
+                                <div style="font-size: 12px; color: #10b981; font-weight: bold; margin-bottom: 8px;">YES POSITION</div>
+                                <div id="yes-position-count" style="font-size: 32px; font-weight: bold; color: #10b981;">0</div>
+                                <div style="font-size: 11px; color: #888; margin-top: 5px;">contracts</div>
+                            </div>
+                            <div style="background: rgba(239, 68, 68, 0.15); border: 2px solid #ef4444; border-radius: 10px; padding: 20px; text-align: center;">
+                                <div style="font-size: 12px; color: #ef4444; font-weight: bold; margin-bottom: 8px;">NO POSITION</div>
+                                <div id="no-position-count" style="font-size: 32px; font-weight: bold; color: #ef4444;">0</div>
+                                <div style="font-size: 11px; color: #888; margin-top: 5px;">contracts</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Contract Size Input -->
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #888;">Contract Size</label>
-                <input type="number" id="contract-size" value="100" min="1" max="10000" style="width: 100%; padding: 15px; font-size: 20px; font-weight: bold; text-align: center;">
-            </div>
+            <!-- Trade Log Section (Full Width) -->
+            <div class="trading-section active" style="margin-top: 15px;">
+                <div class="setup-section">
+                    <h3 style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Trade Log</span>
+                        <span id="log-summary" style="font-size: 12px; color: #888; font-weight: normal;">—</span>
+                    </h3>
 
-            <!-- Trade Buttons -->
-            <div class="trade-buttons">
-                <button class="btn-buy-yes" onclick="executeTrade('yes', 'buy')">
-                    BUY YES
-                </button>
-                <button class="btn-buy-no" onclick="executeTrade('no', 'buy')">
-                    BUY NO
-                </button>
-                <button class="btn-sell" onclick="executeTrade('yes', 'sell')">
-                    SELL YES
-                </button>
-                <button class="btn-sell" onclick="executeTrade('no', 'sell')">
-                    SELL NO
-                </button>
-            </div>
-
-            <!-- Execution Stats -->
-            <div class="execution-stats">
-                <h3 style="margin-bottom: 10px; font-size: 14px; color: #3b82f6;">Session Stats</h3>
-                <div class="stat-row">
-                    <span>Trades:</span>
-                    <span id="total-trades">0</span>
-                </div>
-                <div class="stat-row">
-                    <span>Avg Latency:</span>
-                    <span id="avg-latency">—</span>
-                </div>
-                <div class="stat-row">
-                    <span>Fastest:</span>
-                    <span id="fastest">—</span>
-                </div>
-                <div class="stat-row">
-                    <span>Slowest:</span>
-                    <span id="slowest">—</span>
+                    <!-- Trade Log Table -->
+                    <div style="overflow-x: auto; max-height: 500px; overflow-y: auto; margin-top: 10px;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                            <thead style="position: sticky; top: 0; background: #1a1a1a; z-index: 10;">
+                                <tr style="border-bottom: 2px solid #333;">
+                                    <th style="padding: 10px; text-align: left; color: #888;">Time</th>
+                                    <th style="padding: 10px; text-align: left; color: #888;">Ticker</th>
+                                    <th style="padding: 10px; text-align: left; color: #888;">Action</th>
+                                    <th style="padding: 10px; text-align: right; color: #888;">Qty</th>
+                                    <th style="padding: 10px; text-align: right; color: #888;">Exec Price</th>
+                                    <th style="padding: 10px; text-align: right; color: #888;">Market Price</th>
+                                    <th style="padding: 10px; text-align: right; color: #888;">Slippage</th>
+                                    <th style="padding: 10px; text-align: right; color: #888;">Latency</th>
+                                    <th style="padding: 10px; text-align: right; color: #888;">Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trade-log-body" style="font-family: monospace;">
+                                <tr>
+                                    <td colspan="9" style="padding: 30px; text-align: center; color: #666;">
+                                        No trades yet
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-
-            <button class="btn-danger" onclick="resetSession()">Reset Session</button>
         </div>
     </div>
 
     <script>
         let priceUpdateInterval = null;
+        let priceChart = null;
+        let priceHistory = {
+            timestamps: [],
+            yesPrices: [],
+            noPrices: []
+        };
+        let chartTimeframe = 60; // seconds (default 1 minute)
+        let maxDataPoints = 120; // Keep 2 minutes of second-level data
+        let currentBalance = 0; // Track current balance
+
+        // Bet sizing function
+        function setBetSize(fraction) {
+            // Get current prices - use the HIGHER price to be extra conservative
+            const yesPriceText = document.getElementById('yes-price').textContent;
+            const noPriceText = document.getElementById('no-price').textContent;
+
+            if (yesPriceText === '—' || noPriceText === '—') {
+                showAlert('Wait for prices to load', 'warning');
+                return;
+            }
+
+            const yesPrice = parseFloat(yesPriceText);
+            const noPrice = parseFloat(noPriceText);
+
+            // Use the HIGHER price for conservative calculation (worst case scenario)
+            // This ensures you can afford the trade no matter which side you click
+            const price = Math.max(yesPrice, noPrice);
+
+            if (currentBalance <= 0 || price <= 0) {
+                showAlert('Balance or price not available', 'warning');
+                return;
+            }
+
+            // Calculate max contracts with extra safety margin
+            // Use higher price + reduce effective balance to prevent insufficient funds
+            const dollarPrice = price / 100;
+            const safetyMargin = 0.98; // Use 98% of calculated amount for safety
+            const maxContracts = Math.floor((currentBalance * fraction * safetyMargin) / dollarPrice);
+
+            if (maxContracts < 1) {
+                showAlert('Insufficient balance for this size', 'warning');
+                return;
+            }
+
+            document.getElementById('contract-size').value = maxContracts;
+        }
+
+        // Initialize price chart
+        function initChart() {
+            // Price Chart
+            const ctxPrice = document.getElementById('priceChart').getContext('2d');
+            priceChart = new Chart(ctxPrice, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'YES',
+                            data: [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            pointHoverRadius: 4
+                        },
+                        {
+                            label: 'NO',
+                            data: [],
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            pointHoverRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 2.5,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#fff',
+                                font: { size: 12 },
+                                usePointStyle: true,
+                                boxWidth: 6
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: '#333',
+                            borderWidth: 1,
+                            displayColors: true,
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label;
+                                    const value = context.parsed.y;
+                                    if (label.includes('Price')) {
+                                        return label + ': ' + value + '¢';
+                                    } else {
+                                        return label + ': ' + value.toLocaleString() + ' contracts';
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            grid: {
+                                color: '#333',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#888',
+                                maxTicksLimit: 8,
+                                font: { size: 10 }
+                            }
+                        },
+                        y: {
+                            display: true,
+                            min: 0,
+                            max: 100,
+                            grid: {
+                                color: '#333',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#888',
+                                callback: function(value) {
+                                    return value + '¢';
+                                },
+                                font: { size: 10 }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 0 // Disable animation for real-time updates
+                    }
+                }
+            });
+        }
+
+        // Update price chart
+        function updateChart(yesPrice, noPrice) {
+            if (!priceChart) return;
+
+            const now = new Date();
+            const timestamp = now.getTime();
+
+            // Add to history
+            priceHistory.timestamps.push(timestamp);
+            priceHistory.yesPrices.push(yesPrice);
+            priceHistory.noPrices.push(noPrice);
+
+            // Trim to max data points
+            if (priceHistory.timestamps.length > maxDataPoints) {
+                priceHistory.timestamps.shift();
+                priceHistory.yesPrices.shift();
+                priceHistory.noPrices.shift();
+            }
+
+            // Filter data based on timeframe
+            const cutoffTime = timestamp - (chartTimeframe * 1000);
+            const filteredData = priceHistory.timestamps.reduce((acc, ts, idx) => {
+                if (ts >= cutoffTime) {
+                    const date = new Date(ts);
+                    acc.labels.push(date.toLocaleTimeString('en-US', {
+                        hour12: false,
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    }));
+                    acc.yes.push(priceHistory.yesPrices[idx]);
+                    acc.no.push(priceHistory.noPrices[idx]);
+                }
+                return acc;
+            }, { labels: [], yes: [], no: [] });
+
+            // Update price chart
+            priceChart.data.labels = filteredData.labels;
+            priceChart.data.datasets[0].data = filteredData.yes;
+            priceChart.data.datasets[1].data = filteredData.no;
+            priceChart.update('none');
+        }
+
+        // Update position volume display
+        async function updateVolumeChart() {
+            try {
+                const response = await fetch('/api/positions');
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update YES position count
+                    document.getElementById('yes-position-count').textContent =
+                        data.positions.yes.count.toLocaleString();
+
+                    // Update NO position count
+                    document.getElementById('no-position-count').textContent =
+                        data.positions.no.count.toLocaleString();
+                }
+            } catch (error) {
+                console.error('Volume display update failed:', error);
+            }
+        }
+
+        // Set chart timeframe
+        function setChartTimeframe(seconds) {
+            chartTimeframe = seconds;
+
+            // Update button states
+            document.querySelectorAll('.chart-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Force chart updates with current timeframe
+            if (priceChart && priceHistory.timestamps.length > 0) {
+                const lastYes = priceHistory.yesPrices[priceHistory.yesPrices.length - 1];
+                const lastNo = priceHistory.noPrices[priceHistory.noPrices.length - 1];
+                updateChart(lastYes, lastNo);
+            }
+            updateVolumeChart(); // Update volume chart too
+        }
 
         function showAlert(message, type = 'success') {
             const container = document.getElementById('alert-container');
@@ -349,6 +824,73 @@
                 alert.remove();
             }, 5000);
         }
+
+        // Ticker search with debouncing
+        let searchTimeout = null;
+        async function searchTickers() {
+            const query = document.getElementById('ticker-input').value.trim();
+
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+
+            if (query.length < 2) {
+                document.getElementById('ticker-results').style.display = 'none';
+                return;
+            }
+
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch(`/api/search-markets?q=${encodeURIComponent(query)}&limit=50`);
+                    const data = await response.json();
+
+                    if (data.success && data.markets.length > 0) {
+                        displayTickerResults(data.markets);
+                    } else {
+                        document.getElementById('ticker-results').style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('Ticker search failed:', error);
+                }
+            }, 300); // Debounce 300ms
+        }
+
+        function displayTickerResults(markets) {
+            const resultsDiv = document.getElementById('ticker-results');
+            resultsDiv.innerHTML = '';
+
+            markets.forEach(market => {
+                const item = document.createElement('div');
+                item.className = 'ticker-item';
+                item.onclick = () => selectTicker(market.ticker);
+
+                const code = document.createElement('div');
+                code.className = 'ticker-code';
+                code.textContent = market.ticker;
+
+                const title = document.createElement('div');
+                title.className = 'ticker-title';
+                title.textContent = market.title;
+
+                item.appendChild(code);
+                item.appendChild(title);
+                resultsDiv.appendChild(item);
+            });
+
+            resultsDiv.style.display = 'block';
+        }
+
+        function selectTicker(ticker) {
+            document.getElementById('ticker-input').value = ticker;
+            document.getElementById('ticker-results').style.display = 'none';
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#ticker-input') && !e.target.closest('#ticker-results')) {
+                document.getElementById('ticker-results').style.display = 'none';
+            }
+        });
 
         async function authenticate() {
             try {
@@ -376,7 +918,8 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    document.getElementById('balance').textContent = '$' + data.balance.toFixed(0);
+                    currentBalance = data.balance; // Store for bet sizing
+                    document.getElementById('balance').textContent = '$' + data.balance.toFixed(2);
                 }
             } catch (error) {
                 console.error('Balance update failed:', error);
@@ -400,12 +943,25 @@
 
                 if (data.success) {
                     showAlert('Market loaded: ' + ticker, 'success');
+
+                    // Update active market banner
+                    document.getElementById('active-ticker').textContent = ticker;
+                    document.getElementById('active-market-title').textContent = data.market.title || 'Market loaded';
+                    document.getElementById('active-market-banner').style.display = 'block';
+
                     document.getElementById('setup-section').style.display = 'none';
                     document.getElementById('trading-section').classList.add('active');
 
-                    // Start price updates - every 500ms for faster response
+                    // Initialize charts
+                    initChart();
+
+                    // Start price updates - every 200ms (0.2s) for fastest response
                     updatePrices();
-                    priceUpdateInterval = setInterval(updatePrices, 500);
+                    priceUpdateInterval = setInterval(updatePrices, 200);
+
+                    // Update volume chart every second
+                    updateVolumeChart();
+                    setInterval(updateVolumeChart, 1000);
                 } else {
                     throw new Error(data.error);
                 }
@@ -422,13 +978,21 @@
 
                 if (data.success) {
                     // Display prices in cents
-                    const yesPrice = data.yes_price !== null && data.yes_price !== undefined ? data.yes_price : '—';
-                    const noPrice = data.no_price !== null && data.no_price !== undefined ? data.no_price : '—';
+                    const yesPrice = data.yes_price !== null && data.yes_price !== undefined ? data.yes_price : null;
+                    const noPrice = data.no_price !== null && data.no_price !== undefined ? data.no_price : null;
 
-                    document.getElementById('yes-price').textContent = yesPrice;
-                    document.getElementById('no-price').textContent = noPrice;
+                    const yesPriceDisplay = yesPrice !== null ? yesPrice : '—';
+                    const noPriceDisplay = noPrice !== null ? noPrice : '—';
 
-                    console.log('Prices updated:', {yes: yesPrice, no: noPrice}); // Debug
+                    document.getElementById('yes-price').textContent = yesPriceDisplay;
+                    document.getElementById('no-price').textContent = noPriceDisplay;
+
+                    // Update chart with valid prices (volume will be 0 if no trade this second)
+                    if (yesPrice !== null && noPrice !== null) {
+                        updateChart(yesPrice, noPrice, 0, 0);
+                    }
+
+                    console.log('Prices updated:', {yes: yesPriceDisplay, no: noPriceDisplay}); // Debug
 
                     const latency = Date.now() - start;
                     const latencyEl = document.getElementById('latency');
@@ -504,8 +1068,22 @@
                         showAlert(data.warning, 'warning');
                     }
 
+                    // Update balance locally for instant feedback
+                    if (action === 'buy' && typeof price === 'number') {
+                        // Buying costs money
+                        const tradeCost = (contractSize * price) / 100; // Convert cents to dollars
+                        currentBalance -= tradeCost;
+                        document.getElementById('balance').textContent = '$' + currentBalance.toFixed(2);
+                    } else if (action === 'sell' && typeof price === 'number') {
+                        // Selling adds money
+                        const tradeRevenue = (contractSize * price) / 100; // Convert cents to dollars
+                        currentBalance += tradeRevenue;
+                        document.getElementById('balance').textContent = '$' + currentBalance.toFixed(2);
+                    }
+
                     updateStats();
-                    updateBalance();
+                    updateBalance();  // Still fetch from API to get accurate balance
+                    updateTradeLog();  // Update trade log
                 } else {
                     throw new Error(data.error);
                 }
@@ -537,6 +1115,71 @@
             }
         }
 
+        async function updateTradeLog() {
+            try {
+                const response = await fetch('/api/trade-log');
+                const data = await response.json();
+
+                if (data.success) {
+                    const logBody = document.getElementById('trade-log-body');
+                    const summary = document.getElementById('log-summary');
+
+                    // Update summary
+                    if (data.summary.total_trades > 0) {
+                        summary.innerHTML = `
+                            Trades: ${data.summary.total_trades} |
+                            Volume: $${data.summary.total_volume_usd.toFixed(2)} |
+                            Avg Slippage: ${data.summary.avg_slippage_cents.toFixed(2)}¢ |
+                            Total Slippage: $${data.summary.total_slippage_usd.toFixed(2)}
+                        `;
+                    }
+
+                    // Update table rows
+                    if (data.trades.length === 0) {
+                        logBody.innerHTML = `
+                            <tr>
+                                <td colspan="9" style="padding: 30px; text-align: center; color: #666;">
+                                    No trades yet
+                                </td>
+                            </tr>
+                        `;
+                    } else {
+                        // Display trades in reverse order (most recent first)
+                        logBody.innerHTML = data.trades.slice().reverse().map(trade => {
+                            const time = new Date(trade.timestamp).toLocaleTimeString();
+                            const actionText = `${trade.action.toUpperCase()} ${trade.side.toUpperCase()}`;
+                            const actionColor = trade.action === 'buy'
+                                ? (trade.side === 'yes' ? '#10b981' : '#ef4444')
+                                : '#f59e0b';
+
+                            const slippageColor = trade.slippage_cents > 0 ? '#ef4444' : '#10b981';
+
+                            return `
+                                <tr style="border-bottom: 1px solid #2a2a2a;">
+                                    <td style="padding: 8px;">${time}</td>
+                                    <td style="padding: 8px; color: #3b82f6; font-size: 11px;">${trade.ticker || '—'}</td>
+                                    <td style="padding: 8px; color: ${actionColor}; font-weight: bold;">${actionText}</td>
+                                    <td style="padding: 8px; text-align: right;">${trade.count}</td>
+                                    <td style="padding: 8px; text-align: right;">${trade.executed_price}¢</td>
+                                    <td style="padding: 8px; text-align: right; color: #888;">${trade.pre_market_price}¢</td>
+                                    <td style="padding: 8px; text-align: right; color: ${slippageColor}; font-weight: bold;">
+                                        ${trade.slippage_cents > 0 ? '+' : ''}${trade.slippage_cents.toFixed(1)}¢
+                                        <br><span style="font-size: 10px;">${trade.slippage_cost_usd >= 0 ? '+' : ''}$${trade.slippage_cost_usd.toFixed(2)}</span>
+                                    </td>
+                                    <td style="padding: 8px; text-align: right; color: ${trade.latency_ms > 500 ? '#ef4444' : '#888'};">
+                                        ${trade.latency_ms.toFixed(0)}ms
+                                    </td>
+                                    <td style="padding: 8px; text-align: right;">$${trade.total_cost_usd.toFixed(2)}</td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('Trade log update failed:', error);
+            }
+        }
+
         async function resetSession() {
             if (!confirm('Reset session stats?')) return;
 
@@ -547,11 +1190,40 @@
                 if (data.success) {
                     showAlert('Session reset', 'success');
                     updateStats();
+                    updateTradeLog();  // Clear trade log
+
+                    // Clear chart histories
+                    priceHistory = {
+                        timestamps: [],
+                        yesPrices: [],
+                        noPrices: []
+                    };
+                    positionHistory = {
+                        timestamps: [],
+                        yesPositions: [],
+                        noPositions: []
+                    };
+
+                    if (priceChart) {
+                        priceChart.data.labels = [];
+                        priceChart.data.datasets[0].data = [];
+                        priceChart.data.datasets[1].data = [];
+                        priceChart.update();
+                    }
+
+                    // Reset position displays
+                    document.getElementById('yes-position-count').textContent = '0';
+                    document.getElementById('no-position-count').textContent = '0';
                 }
             } catch (error) {
                 showAlert('Reset failed: ' + error.message, 'error');
             }
         }
+
+        // Initialize trade log on page load
+        window.addEventListener('load', () => {
+            updateTradeLog();
+        });
 
         // Prevent accidental navigation
         window.addEventListener('beforeunload', (e) => {

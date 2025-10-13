@@ -50,11 +50,8 @@ class FastKalshiClient:
         """Sign request with private key using PSS padding"""
         timestamp = str(int(time.time() * 1000))
 
-        # Remove query parameters from path
-        path_without_query = path.split('?')[0]
-
-        # IMPORTANT: Sign with FULL path including /trade-api/v2
-        full_path = "/trade-api/v2" + path_without_query
+        # IMPORTANT: Sign with FULL path including /trade-api/v2 and query params
+        full_path = "/trade-api/v2" + path
 
         # Create string to sign: timestamp + method + full_path (NO body)
         msg_string = timestamp + method + full_path
@@ -74,13 +71,19 @@ class FastKalshiClient:
 
         return timestamp, signature_b64
 
-    def _make_signed_request(self, method: str, path: str, json_data: Dict = None) -> requests.Response:
+    def _make_signed_request(self, method: str, path: str, json_data: Dict = None, params: Dict = None) -> requests.Response:
         """Make authenticated request with signature"""
         body = ""
         if json_data:
             body = json_lib.dumps(json_data)
 
-        timestamp, signature = self._sign_request(method, path, body)
+        # Build full path with query params for signature
+        full_path_for_sig = path
+        if params:
+            query_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
+            full_path_for_sig = f"{path}?{query_string}"
+
+        timestamp, signature = self._sign_request(method, full_path_for_sig, body)
 
         headers = {
             'KALSHI-ACCESS-KEY': self.api_key_id,
@@ -94,7 +97,7 @@ class FastKalshiClient:
         url = self.base_url + path
 
         if method == 'GET':
-            return self.session.get(url, headers=headers)
+            return self.session.get(url, headers=headers, params=params)
         elif method == 'POST':
             return self.session.post(url, headers=headers, data=body)
         else:
@@ -119,6 +122,27 @@ class FastKalshiClient:
             'balance': balance,
             'member_id': self.api_key_id  # Use API key ID as member identifier
         }
+
+    def search_markets(self, query: str = '', limit: int = 20) -> Dict:
+        """Search for markets by ticker or title"""
+        self.ensure_authenticated()
+        start_time = time.time()
+
+        params = {
+            'limit': str(limit),
+            'status': 'open'  # Only show tradeable markets
+        }
+
+        # Add ticker prefix filter if query provided
+        if query:
+            # Kalshi uses 'ticker' param for prefix matching
+            params['ticker'] = query.upper()
+
+        response = self._make_signed_request('GET', '/markets', params=params)
+        response.raise_for_status()
+
+        elapsed = (time.time() - start_time) * 1000
+        return {'data': response.json(), 'latency_ms': elapsed}
 
     def get_market(self, ticker: str) -> Dict:
         """Get market details"""

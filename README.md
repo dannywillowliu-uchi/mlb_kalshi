@@ -111,18 +111,12 @@ Then open `http://YOUR_IP:5000` on your phone browser.
 
 ## Risk Management
 
-### Per-Trade Limits
-- Max position size: 5,000 contracts
-- Max position value: 30% of account balance
-- Max loss per trade: -$200 or -2% of account
-
-### Per-Game Limits
-- Max trades: 8
-- Max loss: -$500 or -5% of account
-- Stop after 3 consecutive losses
-
-### Daily Limits
-- Max loss per day: -$1,000 or -10% of account
+### Risk Guidelines
+- Position sizing: Based on your risk tolerance and account size
+- Stop losses: Use strategically (e.g., -2¢ price move)
+- Monitor PAL: Be aware of $25K Position Accountability Level
+- Track performance: Monitor win rate and P&L throughout session
+- Take breaks: Stop trading if feeling emotional or after consecutive losses
 
 ## Troubleshooting
 

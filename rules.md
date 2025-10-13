@@ -44,28 +44,19 @@ Execute high-volume, fast-turnover arbitrage trades on Kalshi MLB markets by exp
 - Kalshi uses Position Accountability Levels, not hard limits
 - PAL for MLB markets: **$25,000 per strike, per member**
 - This is a monitoring threshold where Kalshi may review your activity
-- You can exceed PAL with justification, but stay well below for safety
+- You can exceed PAL with justification
 
 **Practical Position Sizing:**
 
-```
-Account Balance → Max Position Value → Typical Contract Size
-$5,000         → $1,500 (30%)       → 1,000-2,000 contracts
-$10,000        → $3,000 (30%)       → 2,000-3,000 contracts  
-$25,000        → $7,500 (30%)       → 3,000-5,000 contracts
-$50,000        → $15,000 (30%)      → 5,000-10,000 contracts
-```
+Size based on your risk tolerance, account balance, and market liquidity.
 
-**Position Sizing Formula:**
-```
-Max Position Value = Account Balance × 30%
-Max Contracts = Position Value ÷ Entry Price
-```
-
-**Example Calculations:**
-- $10K account, buying YES @ 60¢: Max 5,000 contracts ($3,000 position value)
-- $25K account, buying YES @ 50¢: Max 15,000 contracts ($7,500 position value)
-- Both stay well under $25K PAL limit
+**Example Position Sizes:**
+- Small: 500-1,000 contracts
+- Medium: 1,000-2,000 contracts
+- Standard: 1,500-3,000 contracts
+- Large: 2,000-5,000 contracts
+- X-Large: 3,000-10,000 contracts
+- Very Large: 10,000+ contracts
 
 **Size Presets (Configure in UI):**
 - Small: 500 contracts
@@ -73,7 +64,8 @@ Max Contracts = Position Value ÷ Entry Price
 - Standard: 1,500 contracts
 - Large: 2,000 contracts
 - X-Large: 3,000 contracts
-- Max: 5,000 contracts
+- Very Large: 5,000 contracts
+- Custom: Any amount you specify
 
 ### 3. Entry Rules
 - **Only trade what you personally witness** - no trading on scoreboard delays
@@ -105,22 +97,22 @@ Max Contracts = Position Value ÷ Entry Price
 
 ## Risk Management
 
-### Hard Limits (NEVER EXCEED)
+### Risk Guidelines
 
-**Per-Trade Limits:**
-- Maximum position size: 5,000 contracts
-- Maximum position value: 30% of account balance
-- Maximum loss per trade: -$200 or -2% of account (whichever is smaller)
-- Stop loss trigger: -2¢ price move against you
+**Per-Trade Guidelines:**
+- Position size: Based on your risk tolerance and account size
+- Stop loss trigger: -2¢ price move against you (recommended)
+- Monitor position value relative to account balance
 
-**Per-Game Limits:**
-- Maximum trades per game: 8 trades
-- Maximum loss per game: -$500 or -5% of account
-- Maximum total exposure: Stop trading after losing 3 trades in a row
+**Per-Game Guidelines:**
+- Monitor cumulative losses throughout the game
+- Consider stopping after losing 3 trades in a row
+- Adjust position sizes based on performance
 
-**Per-Day Limits:**
-- Maximum loss per day: -$1,000 or -10% of account
-- After hitting daily loss limit: STOP TRADING immediately
+**Per-Day Guidelines:**
+- Track daily P&L
+- Consider stopping if experiencing significant losses
+- Take breaks if feeling emotional or stressed
 
 ### Position Accountability Management
 
@@ -130,21 +122,20 @@ Current Position Value = Contracts × Entry Price
 PAL Usage = Position Value ÷ $25,000
 ```
 
-**Safety Thresholds:**
-- <40% of PAL ($10,000): ✅ Safe zone
-- 40-60% of PAL ($10K-$15K): ⚠️ Caution - reduce size
-- 60-80% of PAL ($15K-$20K): 🔴 High risk - trade carefully
-- >80% of PAL ($20K+): ⛔ STOP - approaching accountability level
+**PAL Awareness:**
+- Monitor your position value relative to the $25K PAL threshold
+- Understand that Kalshi may review activity approaching or exceeding PAL
+- Be prepared to explain your strategy if contacted
+- Consider your risk tolerance when sizing positions
 
 **Multiple Position Rule:**
 - If holding multiple positions across different strikes, sum all position values
-- Total exposure across all positions must stay under 60% of PAL ($15,000)
+- Monitor total exposure across all positions
 
 ### Pre-Trade Checks (Every Single Trade)
 - [ ] Clear view of what just happened on field
-- [ ] Current orderbook has >500 contracts depth
-- [ ] Position size within account limits (check: contracts × price ≤ 30% of balance)
-- [ ] Position value under PAL limits (check: value < $15,000)
+- [ ] Current orderbook has sufficient liquidity for your position size
+- [ ] Position size appropriate for your risk tolerance
 - [ ] No existing position open (or ready to close existing first)
 - [ ] Internet connection strong (test: can you load prices quickly?)
 - [ ] Cooldown period elapsed (>10 seconds since last trade)
@@ -155,7 +146,6 @@ PAL Usage = Position Value ÷ $25,000
 - ❌ Revenge trading after losses (increasing size to "get even")
 - ❌ Adding to losing positions (no averaging down)
 - ❌ Trading while distracted, emotional, or intoxicated
-- ❌ Exceeding position size limits "just this once"
 - ❌ Trading without verifying sufficient orderbook liquidity
 - ❌ Holding positions past 30 seconds (must flip fast)
 - ❌ Trading in multiple games simultaneously (focus on one)
@@ -173,7 +163,7 @@ PAL Usage = Position Value ÷ $25,000
 
 **Account Preparation:**
 1. Ensure Kalshi account funded with sufficient capital
-2. Calculate position sizes based on account balance
+2. Decide on position sizes based on your risk tolerance
 3. Verify no pending withdrawals or account restrictions
 4. Check transaction history to ensure API access working
 
@@ -198,7 +188,7 @@ PAL Usage = Position Value ÷ $25,000
 3. Set active market ticker in UI
 4. Load current orderbook and verify prices displaying correctly
 5. Test 1-2 small practice trades (25-50 contracts) to verify execution
-6. Configure position size presets based on account balance
+6. Configure position size presets based on your preferences
 
 **Final Checks:**
 1. Verify UI is responsive and buttons work smoothly
@@ -542,8 +532,8 @@ $50K Account:
 - Win rate: >60%
 - Avg execution time: <500ms
 - Avg hold time: 10-20 seconds
-- Rule compliance: 100%
-- Stop losses honored: 100%
+- Disciplined trading approach
+- Stop losses honored when appropriate
 
 ### Performance Tracking Spreadsheet
 
@@ -672,12 +662,11 @@ $50K Account:
 
 ## Emergency Stops
 
-### Immediately Stop Trading If:
+### Consider Stopping Trading If:
 
 **Financial Triggers:**
-- ❌ Lost $500 in a single game
-- ❌ Lost $1,000 in a single day
-- ❌ Down 10% of account balance
+- ❌ Experiencing significant losses that exceed your comfort level
+- ❌ Down a substantial percentage of account balance
 - ❌ Hit 3 consecutive stop losses
 
 **Technical Triggers:**
@@ -859,16 +848,16 @@ $50K Account:
 ## Core Principles (Never Forget)
 
 1. **Speed wins** - Execute in <500ms or miss the opportunity
-2. **Size matters** - Use 1000-3000 contracts to make meaningful profits
+2. **Size appropriately** - Use position sizes that match your risk tolerance
 3. **Flip fast** - Hold 5-20 seconds max, then sell
 4. **Repeat** - Trade multiple events per game
-5. **Risk management** - Stop losses are mandatory, no exceptions
-6. **Stay under PAL** - Keep position values <$15K (60% of $25K limit)
+5. **Risk awareness** - Use stop losses strategically
+6. **Monitor PAL** - Be aware of the $25K Position Accountability Level
 7. **Mind your edge** - If Kalshi speeds up, your edge disappears
-8. **Be disciplined** - Follow every rule, every time
+8. **Be disciplined** - Trade with a consistent approach
 
 **Remember:** This is a latency arbitrage strategy with a potentially limited lifespan. Your edge exists because you're physically present and Kalshi's API is delayed. If either changes, the opportunity vanishes. Trade it while it lasts, but always be prepared for it to end.
 
 ---
 
-*Success comes from: (1) Fast execution, (2) Large positions within risk limits, (3) Quick exits, (4) Repetition, (5) Discipline. Master these five and profit consistently.*
+*Success comes from: (1) Fast execution, (2) Appropriate position sizing, (3) Quick exits, (4) Repetition, (5) Discipline. Master these five and profit consistently.*
