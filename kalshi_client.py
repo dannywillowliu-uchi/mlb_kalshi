@@ -1,25 +1,41 @@
 """
 FastKalshiClient - High-performance Kalshi API client for latency arbitrage
 Target: <500ms execution time
+Uses API key authentication with RSA signatures
 """
 
 import os
 import time
+import json as json_lib
 import requests
+import base64
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.backends import default_backend
 
 load_dotenv()
 
 
 class FastKalshiClient:
-    """Optimized Kalshi client with persistent connections and auto token refresh"""
+    """Optimized Kalshi client with persistent connections and API key authentication"""
 
     def __init__(self):
-        self.base_url = os.getenv('KALSHI_API_BASE', 'https://trading-api.kalshi.com/trade-api/v2')
-        self.email = os.getenv('KALSHI_EMAIL')
-        self.password = os.getenv('KALSHI_PASSWORD')
+        self.base_url = os.getenv('KALSHI_API_BASE', 'https://api.elections.kalshi.com/trade-api/v2')
+        self.api_key_id = os.getenv('KALSHI_API_KEY_ID')
+        private_key_str = os.getenv('KALSHI_PRIVATE_KEY')
+
+        # Load private key
+        if private_key_str:
+            self.private_key = serialization.load_pem_private_key(
+                private_key_str.encode(),
+                password=None,
+                backend=default_backend()
+            )
+        else:
+            self.private_key = None
 
         # Persistent session for connection reuse (reduces latency)
         self.session = requests.Session()
@@ -28,52 +44,88 @@ class FastKalshiClient:
             'Accept': 'application/json'
         })
 
-        self.token = None
-        self.token_expiry = None
         self.member_id = None
 
-    def _should_refresh_token(self) -> bool:
-        """Check if token needs refresh (refresh 5 minutes before expiry)"""
-        if not self.token or not self.token_expiry:
-            return True
-        return datetime.now() >= (self.token_expiry - timedelta(minutes=5))
+    def _sign_request(self, method: str, path: str, body: str = "") -> tuple:
+        """Sign request with private key using PSS padding"""
+        timestamp = str(int(time.time() * 1000))
+
+        # Remove query parameters from path
+        path_without_query = path.split('?')[0]
+
+        # IMPORTANT: Sign with FULL path including /trade-api/v2
+        full_path = "/trade-api/v2" + path_without_query
+
+        # Create string to sign: timestamp + method + full_path (NO body)
+        msg_string = timestamp + method + full_path
+
+        # Sign with private key using PSS padding
+        signature = self.private_key.sign(
+            msg_string.encode('utf-8'),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.DIGEST_LENGTH
+            ),
+            hashes.SHA256()
+        )
+
+        # Base64 encode signature
+        signature_b64 = base64.b64encode(signature).decode('utf-8')
+
+        return timestamp, signature_b64
+
+    def _make_signed_request(self, method: str, path: str, json_data: Dict = None) -> requests.Response:
+        """Make authenticated request with signature"""
+        body = ""
+        if json_data:
+            body = json_lib.dumps(json_data)
+
+        timestamp, signature = self._sign_request(method, path, body)
+
+        headers = {
+            'KALSHI-ACCESS-KEY': self.api_key_id,
+            'KALSHI-ACCESS-SIGNATURE': signature,
+            'KALSHI-ACCESS-TIMESTAMP': timestamp,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+
+        # URL uses base_url + path (base_url already has /trade-api/v2)
+        url = self.base_url + path
+
+        if method == 'GET':
+            return self.session.get(url, headers=headers)
+        elif method == 'POST':
+            return self.session.post(url, headers=headers, data=body)
+        else:
+            raise ValueError(f"Unsupported method: {method}")
 
     def ensure_authenticated(self):
-        """Ensure valid authentication, refresh if needed"""
-        if self._should_refresh_token():
-            self.login()
+        """Ensure valid authentication (no-op for API key auth)"""
+        if not self.private_key or not self.api_key_id:
+            raise Exception("API key credentials not configured")
 
     def login(self) -> Dict:
-        """Authenticate and get token"""
+        """Verify API key works by fetching balance"""
         start_time = time.time()
 
-        response = self.session.post(
-            f'{self.base_url}/login',
-            json={'email': self.email, 'password': self.password}
-        )
-        response.raise_for_status()
-
-        data = response.json()
-        self.token = data['token']
-        self.member_id = data['member_id']
-
-        # Kalshi tokens expire after 30 minutes
-        self.token_expiry = datetime.now() + timedelta(minutes=30)
-
-        # Update session headers with token
-        self.session.headers.update({'Authorization': f'Bearer {self.token}'})
+        balance = self.get_balance()
 
         elapsed = (time.time() - start_time) * 1000
         print(f"✓ Authenticated in {elapsed:.0f}ms")
 
-        return data
+        return {
+            'success': True,
+            'balance': balance,
+            'member_id': self.api_key_id  # Use API key ID as member identifier
+        }
 
     def get_market(self, ticker: str) -> Dict:
         """Get market details"""
         self.ensure_authenticated()
         start_time = time.time()
 
-        response = self.session.get(f'{self.base_url}/markets/{ticker}')
+        response = self._make_signed_request('GET', f'/markets/{ticker}')
         response.raise_for_status()
 
         elapsed = (time.time() - start_time) * 1000
@@ -84,15 +136,18 @@ class FastKalshiClient:
         self.ensure_authenticated()
         start_time = time.time()
 
-        response = self.session.get(f'{self.base_url}/markets/{ticker}/orderbook')
+        response = self._make_signed_request('GET', f'/markets/{ticker}/orderbook')
         response.raise_for_status()
 
         data = response.json()
         elapsed = (time.time() - start_time) * 1000
 
+        # The orderbook is nested inside 'orderbook' key
+        orderbook = data.get('orderbook', {})
+
         return {
-            'yes_bids': data.get('yes', []),
-            'no_bids': data.get('no', []),
+            'yes': orderbook.get('yes', []),
+            'no': orderbook.get('no', []),
             'latency_ms': elapsed
         }
 
@@ -123,10 +178,7 @@ class FastKalshiClient:
             'yes_price' if side == 'yes' else 'no_price': price
         }
 
-        response = self.session.post(
-            f'{self.base_url}/portfolio/orders',
-            json=order_data
-        )
+        response = self._make_signed_request('POST', '/portfolio/orders', order_data)
         response.raise_for_status()
 
         elapsed = (time.time() - start_time) * 1000
@@ -135,56 +187,51 @@ class FastKalshiClient:
 
         return result
 
-    def quick_buy_yes(self, ticker: str, count: int, aggressive_cents: int = 3) -> Dict:
+    def quick_buy_yes(self, ticker: str, count: int, current_price: int) -> Dict:
         """
-        Quick buy YES - uses aggressive limit order for guaranteed fill
-        Adds aggressive_cents to current best bid for fast execution
+        Quick buy YES - uses price from UI (old price) + 1¢
+        For latency arbitrage: buy at the price you saw BEFORE the event updates
         """
-        # Get current orderbook
-        orderbook = self.get_orderbook(ticker)
-
-        if not orderbook['yes_bids']:
-            raise Exception("No YES bids available in orderbook")
-
-        # Get best bid and add aggressive cents
-        best_bid = orderbook['yes_bids'][0]['price']
-        buy_price = min(99, best_bid + aggressive_cents)
+        # Use the price passed from UI (which is ~2 seconds old)
+        buy_price = min(99, current_price + 1)
 
         return self.place_order(ticker, 'yes', 'buy', count, buy_price)
 
-    def quick_buy_no(self, ticker: str, count: int, aggressive_cents: int = 3) -> Dict:
-        """Quick buy NO with aggressive pricing"""
-        orderbook = self.get_orderbook(ticker)
-
-        if not orderbook['no_bids']:
-            raise Exception("No NO bids available in orderbook")
-
-        best_bid = orderbook['no_bids'][0]['price']
-        buy_price = min(99, best_bid + aggressive_cents)
+    def quick_buy_no(self, ticker: str, count: int, current_price: int) -> Dict:
+        """
+        Quick buy NO - uses price from UI (old price) + 1¢
+        For latency arbitrage: buy at the price you saw BEFORE the event updates
+        """
+        # Use the price passed from UI (which is ~2 seconds old)
+        buy_price = min(99, current_price + 1)
 
         return self.place_order(ticker, 'no', 'buy', count, buy_price)
 
-    def quick_sell_yes(self, ticker: str, count: int, aggressive_cents: int = 2) -> Dict:
-        """Quick sell YES - aggressive pricing for fast exit"""
+    def quick_sell_yes(self, ticker: str, count: int) -> Dict:
+        """Quick sell YES - market order for immediate fill"""
+        # Get FRESH orderbook right before placing order
         orderbook = self.get_orderbook(ticker)
 
-        if not orderbook['yes_bids']:
-            raise Exception("No YES bids available in orderbook")
+        if not orderbook['yes']:
+            raise Exception("No YES orders available in orderbook")
 
-        best_bid = orderbook['yes_bids'][0]['price']
-        sell_price = max(1, best_bid - aggressive_cents)
+        # Sell at highest bid (last element) for immediate fill
+        best_yes_bid = orderbook['yes'][-1][0]
+        sell_price = best_yes_bid
 
         return self.place_order(ticker, 'yes', 'sell', count, sell_price)
 
-    def quick_sell_no(self, ticker: str, count: int, aggressive_cents: int = 2) -> Dict:
-        """Quick sell NO - aggressive pricing for fast exit"""
+    def quick_sell_no(self, ticker: str, count: int) -> Dict:
+        """Quick sell NO - market order for immediate fill"""
+        # Get FRESH orderbook right before placing order
         orderbook = self.get_orderbook(ticker)
 
-        if not orderbook['no_bids']:
-            raise Exception("No NO bids available in orderbook")
+        if not orderbook['no']:
+            raise Exception("No NO orders available in orderbook")
 
-        best_bid = orderbook['no_bids'][0]['price']
-        sell_price = max(1, best_bid - aggressive_cents)
+        # Sell at highest bid (last element) for immediate fill
+        best_no_bid = orderbook['no'][-1][0]
+        sell_price = best_no_bid
 
         return self.place_order(ticker, 'no', 'sell', count, sell_price)
 
@@ -192,7 +239,7 @@ class FastKalshiClient:
         """Get current open positions"""
         self.ensure_authenticated()
 
-        response = self.session.get(f'{self.base_url}/portfolio/positions')
+        response = self._make_signed_request('GET', '/portfolio/positions')
         response.raise_for_status()
 
         return response.json().get('positions', [])
@@ -201,7 +248,7 @@ class FastKalshiClient:
         """Get account balance"""
         self.ensure_authenticated()
 
-        response = self.session.get(f'{self.base_url}/portfolio/balance')
+        response = self._make_signed_request('GET', '/portfolio/balance')
         response.raise_for_status()
 
         return response.json()
@@ -210,8 +257,9 @@ class FastKalshiClient:
         """Calculate available liquidity in orderbook"""
         orderbook = self.get_orderbook(ticker)
 
-        yes_depth = sum(bid.get('count', 0) for bid in orderbook['yes_bids'])
-        no_depth = sum(bid.get('count', 0) for bid in orderbook['no_bids'])
+        # Orderbook format: [[price, quantity], [price, quantity], ...]
+        yes_depth = sum(order[1] for order in orderbook['yes']) if orderbook['yes'] else 0
+        no_depth = sum(order[1] for order in orderbook['no']) if orderbook['no'] else 0
 
         return {
             'yes_depth': yes_depth,

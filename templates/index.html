@@ -189,28 +189,6 @@
             margin-top: 5px;
         }
 
-        .position-size-selector {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .size-btn {
-            padding: 15px;
-            background: #1a1a1a;
-            border: 2px solid #333;
-            color: #fff;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 8px;
-        }
-
-        .size-btn.active {
-            background: #3b82f6;
-            border-color: #3b82f6;
-        }
-
         .trade-buttons {
             margin-bottom: 15px;
         }
@@ -303,23 +281,17 @@
                 <div class="price-box">
                     <div class="price-label">YES</div>
                     <div class="price-value yes-price" id="yes-price">—</div>
-                    <div class="depth-info" id="yes-depth">—</div>
                 </div>
                 <div class="price-box">
                     <div class="price-label">NO</div>
                     <div class="price-value no-price" id="no-price">—</div>
-                    <div class="depth-info" id="no-depth">—</div>
                 </div>
             </div>
 
-            <!-- Position Size Selector -->
-            <div class="position-size-selector">
-                <button class="size-btn" onclick="selectSize(500)">500</button>
-                <button class="size-btn" onclick="selectSize(1000)">1000</button>
-                <button class="size-btn active" onclick="selectSize(1500)">1500</button>
-                <button class="size-btn" onclick="selectSize(2000)">2000</button>
-                <button class="size-btn" onclick="selectSize(3000)">3000</button>
-                <button class="size-btn" onclick="selectSize(5000)">5000</button>
+            <!-- Contract Size Input -->
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #888;">Contract Size</label>
+                <input type="number" id="contract-size" value="100" min="1" max="10000" style="width: 100%; padding: 15px; font-size: 20px; font-weight: bold; text-align: center;">
             </div>
 
             <!-- Trade Buttons -->
@@ -364,7 +336,6 @@
     </div>
 
     <script>
-        let selectedSize = 1500;
         let priceUpdateInterval = null;
 
         function showAlert(message, type = 'success') {
@@ -432,9 +403,9 @@
                     document.getElementById('setup-section').style.display = 'none';
                     document.getElementById('trading-section').classList.add('active');
 
-                    // Start price updates
+                    // Start price updates - every 500ms for faster response
                     updatePrices();
-                    priceUpdateInterval = setInterval(updatePrices, 1000);
+                    priceUpdateInterval = setInterval(updatePrices, 500);
                 } else {
                     throw new Error(data.error);
                 }
@@ -450,10 +421,14 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    document.getElementById('yes-price').textContent = data.yes_price || '—';
-                    document.getElementById('no-price').textContent = data.no_price || '—';
-                    document.getElementById('yes-depth').textContent = data.yes_depth + ' contracts';
-                    document.getElementById('no-depth').textContent = data.no_depth + ' contracts';
+                    // Display prices in cents
+                    const yesPrice = data.yes_price !== null && data.yes_price !== undefined ? data.yes_price : '—';
+                    const noPrice = data.no_price !== null && data.no_price !== undefined ? data.no_price : '—';
+
+                    document.getElementById('yes-price').textContent = yesPrice;
+                    document.getElementById('no-price').textContent = noPrice;
+
+                    console.log('Prices updated:', {yes: yesPrice, no: noPrice}); // Debug
 
                     const latency = Date.now() - start;
                     const latencyEl = document.getElementById('latency');
@@ -461,22 +436,12 @@
                     latencyEl.className = 'status-value ' +
                         (latency < 300 ? 'status-good' :
                          latency < 500 ? 'status-warning' : 'status-bad');
-
-                    if (!data.sufficient_liquidity) {
-                        showAlert('WARNING: Low liquidity!', 'warning');
-                    }
+                } else {
+                    console.error('Orderbook error:', data.error);
                 }
             } catch (error) {
                 console.error('Price update failed:', error);
             }
-        }
-
-        function selectSize(size) {
-            selectedSize = size;
-            document.querySelectorAll('.size-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
         }
 
         async function executeTrade(side, action) {
@@ -484,18 +449,55 @@
             button.disabled = true;
             button.textContent = 'EXECUTING...';
 
+            // Get contract size from input
+            const contractSize = parseInt(document.getElementById('contract-size').value);
+
+            if (!contractSize || contractSize < 1) {
+                showAlert('Invalid contract size', 'error');
+                button.disabled = false;
+                button.textContent = `${action === 'buy' ? 'BUY' : 'SELL'} ${side.toUpperCase()}`;
+                return;
+            }
+
             try {
                 const start = Date.now();
+
+                // Get current price from UI for buys (old price before market updates)
+                let currentPrice = null;
+                if (action === 'buy') {
+                    const priceText = document.getElementById(`${side}-price`).textContent;
+                    const priceNum = parseFloat(priceText);
+
+                    if (isNaN(priceNum) || priceText === '—') {
+                        showAlert('Cannot read current price - wait for prices to load', 'error');
+                        button.disabled = false;
+                        button.textContent = `${action === 'buy' ? 'BUY' : 'SELL'} ${side.toUpperCase()}`;
+                        return;
+                    }
+
+                    // Convert to cents if it's in dollars (e.g., 0.86 -> 86)
+                    currentPrice = priceNum < 1 ? Math.round(priceNum * 100) : Math.round(priceNum);
+                }
+
                 const response = await fetch('/api/trade', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ side, action, count: selectedSize })
+                    body: JSON.stringify({
+                        side,
+                        action,
+                        count: contractSize,
+                        current_price: currentPrice
+                    })
                 });
                 const data = await response.json();
                 const totalTime = Date.now() - start;
 
                 if (data.success) {
-                    const msg = `${action.toUpperCase()} ${side.toUpperCase()} - ${selectedSize} contracts in ${totalTime}ms`;
+                    // Extract execution price from order response
+                    const order = data.order;
+                    const price = order.yes_price || order.no_price || 'N/A';
+
+                    const msg = `${action.toUpperCase()} ${side.toUpperCase()} - ${contractSize} contracts @ ${price}¢ in ${totalTime}ms`;
                     showAlert(msg, totalTime < 500 ? 'success' : 'warning');
 
                     if (data.warning) {

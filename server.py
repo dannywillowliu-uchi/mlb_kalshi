@@ -82,9 +82,10 @@ def get_orderbook():
         orderbook = client.get_orderbook(current_ticker)
         depth = client.calculate_orderbook_depth(current_ticker)
 
-        # Calculate best prices
-        yes_price = orderbook['yes_bids'][0]['price'] if orderbook['yes_bids'] else None
-        no_price = orderbook['no_bids'][0]['price'] if orderbook['no_bids'] else None
+        # Get highest bid prices (last element in sorted array)
+        # Orderbook is sorted ascending [1¢, 2¢, ... 86¢], so -1 is the best bid
+        yes_price = orderbook['yes'][-1][0] if orderbook['yes'] else None
+        no_price = orderbook['no'][-1][0] if orderbook['no'] else None
 
         return jsonify({
             'success': True,
@@ -109,6 +110,7 @@ def execute_trade():
     side = data.get('side')  # 'yes' or 'no'
     action = data.get('action')  # 'buy' or 'sell'
     count = data.get('count')  # number of contracts
+    current_price = data.get('current_price')  # price from UI (for buys)
 
     if not all([side, action, count]):
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
@@ -118,9 +120,13 @@ def execute_trade():
 
         # Use quick execution methods
         if action == 'buy' and side == 'yes':
-            result = client.quick_buy_yes(current_ticker, count)
+            if current_price is None:
+                return jsonify({'success': False, 'error': 'Missing current_price for buy'}), 400
+            result = client.quick_buy_yes(current_ticker, count, current_price)
         elif action == 'buy' and side == 'no':
-            result = client.quick_buy_no(current_ticker, count)
+            if current_price is None:
+                return jsonify({'success': False, 'error': 'Missing current_price for buy'}), 400
+            result = client.quick_buy_no(current_ticker, count, current_price)
         elif action == 'sell' and side == 'yes':
             result = client.quick_sell_yes(current_ticker, count)
         elif action == 'sell' and side == 'no':
