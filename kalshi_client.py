@@ -100,6 +100,8 @@ class FastKalshiClient:
             return self.session.get(url, headers=headers, params=params)
         elif method == 'POST':
             return self.session.post(url, headers=headers, data=body)
+        elif method == 'DELETE':
+            return self.session.delete(url, headers=headers)
         else:
             raise ValueError(f"Unsupported method: {method}")
 
@@ -211,23 +213,35 @@ class FastKalshiClient:
 
         return result
 
-    def quick_buy_yes(self, ticker: str, count: int, current_price: int) -> Dict:
+    def quick_buy_yes(self, ticker: str, count: int, current_price: int, price_buffer: int = 2) -> Dict:
         """
-        Quick buy YES - uses price from UI (old price) + 1¢
+        Quick buy YES - uses price from UI (old price) + buffer
         For latency arbitrage: buy at the price you saw BEFORE the event updates
+
+        Args:
+            ticker: Market ticker
+            count: Number of contracts
+            current_price: Current price from UI (in cents)
+            price_buffer: Cents to add above current price (default: 2)
         """
-        # Use the price passed from UI (which is ~2 seconds old)
-        buy_price = min(99, current_price + 1)
+        # Use the price passed from UI + buffer for better fill probability
+        buy_price = min(99, current_price + price_buffer)
 
         return self.place_order(ticker, 'yes', 'buy', count, buy_price)
 
-    def quick_buy_no(self, ticker: str, count: int, current_price: int) -> Dict:
+    def quick_buy_no(self, ticker: str, count: int, current_price: int, price_buffer: int = 2) -> Dict:
         """
-        Quick buy NO - uses price from UI (old price) + 1¢
+        Quick buy NO - uses price from UI (old price) + buffer
         For latency arbitrage: buy at the price you saw BEFORE the event updates
+
+        Args:
+            ticker: Market ticker
+            count: Number of contracts
+            current_price: Current price from UI (in cents)
+            price_buffer: Cents to add above current price (default: 2)
         """
-        # Use the price passed from UI (which is ~2 seconds old)
-        buy_price = min(99, current_price + 1)
+        # Use the price passed from UI + buffer for better fill probability
+        buy_price = min(99, current_price + price_buffer)
 
         return self.place_order(ticker, 'no', 'buy', count, buy_price)
 
@@ -273,6 +287,24 @@ class FastKalshiClient:
         self.ensure_authenticated()
 
         response = self._make_signed_request('GET', '/portfolio/balance')
+        response.raise_for_status()
+
+        return response.json()
+
+    def get_order_status(self, order_id: str) -> Dict:
+        """Get status of a specific order"""
+        self.ensure_authenticated()
+
+        response = self._make_signed_request('GET', f'/portfolio/orders/{order_id}')
+        response.raise_for_status()
+
+        return response.json()
+
+    def cancel_order(self, order_id: str) -> Dict:
+        """Cancel an order"""
+        self.ensure_authenticated()
+
+        response = self._make_signed_request('DELETE', f'/portfolio/orders/{order_id}')
         response.raise_for_status()
 
         return response.json()

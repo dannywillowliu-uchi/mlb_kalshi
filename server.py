@@ -7,6 +7,7 @@ from flask import Flask, render_template, jsonify, request
 from kalshi_client import FastKalshiClient
 import time
 from datetime import datetime
+import threading
 
 app = Flask(__name__)
 client = FastKalshiClient()
@@ -24,6 +25,50 @@ local_positions = {
     'yes': {'count': 0, 'avg_price': 0},
     'no': {'count': 0, 'avg_price': 0}
 }
+
+# Pending orders tracking for auto-cancellation
+pending_orders = {}  # {order_id: {'timestamp': time, 'ticker': ticker, 'cancel_after_ms': timeout}}
+
+
+def monitor_and_cancel_order(order_id: str, cancel_after_seconds: float = 2.0):
+    """
+    Monitor an order and cancel it if not filled within timeout
+    Runs in background thread to avoid blocking trade execution
+    """
+    def cancel_task():
+        time.sleep(cancel_after_seconds)
+
+        try:
+            # Check if order is still pending
+            if order_id not in pending_orders:
+                return  # Already processed
+
+            # Check order status
+            status_response = client.get_order_status(order_id)
+            order_data = status_response.get('order', {})
+            status = order_data.get('status', '')
+
+            # If order is not filled, cancel it
+            if status in ['resting', 'pending']:
+                print(f"[Auto-Cancel] Order {order_id} not filled after {cancel_after_seconds}s, canceling...")
+                client.cancel_order(order_id)
+                print(f"[Auto-Cancel] Order {order_id} canceled successfully")
+            else:
+                print(f"[Auto-Cancel] Order {order_id} already {status}, no cancel needed")
+
+            # Remove from pending orders
+            if order_id in pending_orders:
+                del pending_orders[order_id]
+
+        except Exception as e:
+            print(f"[Auto-Cancel] Error canceling order {order_id}: {e}")
+            # Remove from pending on error
+            if order_id in pending_orders:
+                del pending_orders[order_id]
+
+    # Start background thread
+    thread = threading.Thread(target=cancel_task, daemon=True)
+    thread.start()
 
 
 @app.route('/')
@@ -138,6 +183,39 @@ def get_orderbook():
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
+@app.route('/api/orderbook-depth', methods=['GET'])
+def get_orderbook_depth():
+    """Get full orderbook depth for display"""
+    if not current_ticker:
+        return jsonify({'success': False, 'error': 'No ticker set'}), 400
+
+    try:
+        orderbook = client.get_orderbook(current_ticker)
+
+        # Format orderbook for UI display
+        # Orderbook format: [[price, quantity], [price, quantity], ...]
+        # Sort descending by price (best prices first)
+        yes_levels = [
+            {'price': price, 'quantity': qty}
+            for price, qty in sorted(orderbook['yes'], reverse=True)
+        ][:10]  # Top 10 levels
+
+        no_levels = [
+            {'price': price, 'quantity': qty}
+            for price, qty in sorted(orderbook['no'], reverse=True)
+        ][:10]  # Top 10 levels
+
+        return jsonify({
+            'success': True,
+            'orderbook': {
+                'yes': yes_levels,
+                'no': no_levels
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
 @app.route('/api/trade', methods=['POST'])
 def execute_trade():
     """Execute trade with latency tracking"""
@@ -160,21 +238,35 @@ def execute_trade():
         # This avoids extra API call before execution
         pre_trade_price = current_price if current_price else 0
 
-        # Use quick execution methods
+        # Use quick execution methods with +2 cent buffer
         if action == 'buy' and side == 'yes':
             if current_price is None:
                 return jsonify({'success': False, 'error': 'Missing current_price for buy'}), 400
-            result = client.quick_buy_yes(current_ticker, count, current_price)
+            result = client.quick_buy_yes(current_ticker, count, current_price, price_buffer=2)
         elif action == 'buy' and side == 'no':
             if current_price is None:
                 return jsonify({'success': False, 'error': 'Missing current_price for buy'}), 400
-            result = client.quick_buy_no(current_ticker, count, current_price)
+            result = client.quick_buy_no(current_ticker, count, current_price, price_buffer=2)
         elif action == 'sell' and side == 'yes':
             result = client.quick_sell_yes(current_ticker, count)
         elif action == 'sell' and side == 'no':
             result = client.quick_sell_no(current_ticker, count)
         else:
             return jsonify({'success': False, 'error': 'Invalid side/action'}), 400
+
+        # Get order ID and start auto-cancel monitoring for buy orders
+        order_id = result.get('order', {}).get('order_id')
+        if action == 'buy' and order_id:
+            # Add to pending orders tracking
+            pending_orders[order_id] = {
+                'timestamp': time.time(),
+                'ticker': current_ticker,
+                'side': side,
+                'action': action
+            }
+            # Start background monitoring (2 second timeout)
+            monitor_and_cancel_order(order_id, cancel_after_seconds=2.0)
+            print(f"[Trade] Order {order_id} placed with 2s auto-cancel")
 
         total_latency = (time.time() - start_time) * 1000
 
@@ -236,7 +328,7 @@ def execute_trade():
 
 @app.route('/api/positions', methods=['GET'])
 def get_positions():
-    """Get current positions with real-time value calculation"""
+    """Get current positions formatted for UI (for sell modal)"""
     global local_positions
 
     try:
@@ -246,44 +338,127 @@ def get_positions():
         current_yes_price = orderbook['yes'][-1][0] if orderbook['yes'] else 0
         current_no_price = orderbook['no'][-1][0] if orderbook['no'] else 0
 
-        # Calculate position values and P&L
-        yes_pos = local_positions['yes']
-        no_pos = local_positions['no']
+        # Format positions for UI modal
+        positions_list = []
 
-        yes_cost = yes_pos['count'] * yes_pos['avg_price']
-        no_cost = no_pos['count'] * no_pos['avg_price']
+        if local_positions['yes']['count'] > 0:
+            positions_list.append({
+                'side': 'yes',
+                'quantity': local_positions['yes']['count'],
+                'entry_price': local_positions['yes']['avg_price']
+            })
 
-        yes_value = yes_pos['count'] * current_yes_price
-        no_value = no_pos['count'] * current_no_price
-
-        yes_pnl = yes_value - yes_cost
-        no_pnl = no_value - no_cost
-        total_pnl = yes_pnl + no_pnl
-
-        total_position_value = yes_value + no_value
+        if local_positions['no']['count'] > 0:
+            positions_list.append({
+                'side': 'no',
+                'quantity': local_positions['no']['count'],
+                'entry_price': local_positions['no']['avg_price']
+            })
 
         return jsonify({
             'success': True,
-            'positions': {
-                'yes': {
-                    'count': yes_pos['count'],
-                    'avg_price': yes_pos['avg_price'],
-                    'current_price': current_yes_price,
-                    'cost': yes_cost / 100,  # Convert to dollars
-                    'value': yes_value / 100,
-                    'pnl': yes_pnl / 100
-                },
-                'no': {
-                    'count': no_pos['count'],
-                    'avg_price': no_pos['avg_price'],
-                    'current_price': current_no_price,
-                    'cost': no_cost / 100,
-                    'value': no_value / 100,
-                    'pnl': no_pnl / 100
-                }
-            },
-            'total_pnl': total_pnl / 100,
-            'total_position_value': total_position_value / 100
+            'positions': positions_list
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/orders', methods=['GET'])
+def get_orders():
+    """Get all open orders for current ticker"""
+    if not current_ticker:
+        return jsonify({'success': False, 'error': 'No ticker set'}), 400
+
+    try:
+        # Get all orders for current ticker
+        result = client.get_orders(ticker=current_ticker, status='resting')
+        orders = result.get('orders', [])
+
+        # Format orders for UI
+        formatted_orders = []
+        for order in orders:
+            formatted_orders.append({
+                'order_id': order.get('order_id'),
+                'side': order.get('side'),
+                'action': order.get('action'),
+                'count': order.get('count', 0),
+                'remaining_count': order.get('remaining_count', 0),
+                'yes_price': order.get('yes_price'),
+                'no_price': order.get('no_price'),
+                'status': order.get('status')
+            })
+
+        return jsonify({
+            'success': True,
+            'orders': formatted_orders
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/sell-limit', methods=['POST'])
+def sell_limit():
+    """Place a limit sell order"""
+    if not current_ticker:
+        return jsonify({'success': False, 'error': 'No ticker set'}), 400
+
+    data = request.json
+    side = data.get('side')  # 'yes' or 'no'
+    price = data.get('price')  # limit price in cents
+    count = data.get('count')  # number of contracts
+
+    if not all([side, price, count]):
+        return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+
+    try:
+        # Place limit sell order
+        if side == 'yes':
+            result = client.place_order(
+                ticker=current_ticker,
+                action='sell',
+                side='yes',
+                count=count,
+                yes_price=price,
+                type='limit'
+            )
+        else:  # side == 'no'
+            result = client.place_order(
+                ticker=current_ticker,
+                action='sell',
+                side='no',
+                count=count,
+                no_price=price,
+                type='limit'
+            )
+
+        return jsonify({
+            'success': True,
+            'order': result.get('order', {})
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/cancel-order', methods=['POST'])
+def cancel_order():
+    """Cancel a specific order by ID"""
+    data = request.json
+    order_id = data.get('order_id')
+
+    if not order_id:
+        return jsonify({'success': False, 'error': 'Missing order_id'}), 400
+
+    try:
+        result = client.cancel_order(order_id)
+
+        # Remove from pending_orders if it exists there
+        if order_id in pending_orders:
+            del pending_orders[order_id]
+
+        return jsonify({
+            'success': True,
+            'order_id': order_id,
+            'result': result
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -364,6 +539,25 @@ def reset_session():
         'no': {'count': 0, 'avg_price': 0}
     }
     return jsonify({'success': True})
+
+
+@app.route('/api/pending-orders', methods=['GET'])
+def get_pending_orders():
+    """Get list of pending orders waiting for fill/cancel"""
+    return jsonify({
+        'success': True,
+        'pending_count': len(pending_orders),
+        'orders': [
+            {
+                'order_id': oid,
+                'ticker': info['ticker'],
+                'side': info['side'],
+                'action': info['action'],
+                'age_seconds': time.time() - info['timestamp']
+            }
+            for oid, info in pending_orders.items()
+        ]
+    })
 
 
 if __name__ == '__main__':
