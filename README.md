@@ -16,9 +16,12 @@ pip install -r requirements.txt
 Create `.env` file:
 
 ```bash
-KALSHI_EMAIL=your_email@example.com
-KALSHI_PASSWORD=your_password
-KALSHI_API_BASE=https://trading-api.kalshi.com/trade-api/v2
+  KALSHI_API_KEY_ID=your-api-key-id-here
+  KALSHI_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
+  YOUR_PRIVATE_KEY_CONTENT_HERE
+  -----END RSA PRIVATE KEY-----
+  "
+  KALSHI_API_BASE=https://api.elections.kalshi.com/trade-api/v2
 ```
 
 ### 3. Run Server
@@ -50,7 +53,7 @@ Then open `http://YOUR_IP:5000` on your phone browser.
 ### Setup Phase
 
 1. **Authenticate** - Click "Authenticate to Kalshi" button
-2. **Set Ticker** - Enter market ticker (e.g., `KXMLB-24NY-B`)
+2. **Set Ticker** - Enter market ticker, found under "Timeline and Payout" as "MARKET" (e.g KXMLBGAME-25OCT16TORSEA-TOR)
 3. **Wait for prices** - UI will start showing live YES/NO prices
 
 ### Trading Phase
