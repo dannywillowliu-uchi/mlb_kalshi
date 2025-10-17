@@ -57,26 +57,6 @@ ifconfig
 
 Then open `http://YOUR_IP:5000` on your phone browser.
 
-## Pre-Game Checklist
-
-### 24 Hours Before Game
-
-1. ✅ Find MLB game market ticker on Kalshi
-2. ✅ Verify market has good liquidity (>2000 contracts volume)
-3. ✅ Test server and authentication
-4. ✅ Charge all devices to 100%
-
-### At Stadium (2-3 Hours Before First Pitch)
-
-1. ✅ Test stadium WiFi AND mobile data
-2. ✅ Run speed test (target: >5 Mbps, <100ms ping)
-3. ✅ Open trading UI on phone/laptop
-4. ✅ Authenticate to Kalshi
-5. ✅ Set market ticker
-6. ✅ Verify prices updating correctly
-7. ✅ Place 1-2 small test trades (25-50 contracts)
-8. ✅ Confirm battery >80%
-
 ## How to Use
 
 ### Setup Phase
