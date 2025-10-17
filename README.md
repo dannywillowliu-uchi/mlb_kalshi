@@ -2,18 +2,6 @@
 
 High-performance trading system for exploiting ~2 second delays in Kalshi MLB markets by watching games live in person.
 
-## Features
-
-✅ **FastKalshiClient** - <500ms execution latency with persistent connections
-✅ **Auto token refresh** - No manual re-authentication during games
-✅ **Mobile-optimized UI** - Large touch buttons for stadium use
-✅ **Real-time prices** - Updates every 1 second
-✅ **Orderbook depth** - Liquidity checks before every trade
-✅ **One-tap execution** - BUY YES, BUY NO, SELL YES, SELL NO
-✅ **Position size presets** - 500, 1000, 1500, 2000, 3000, 5000 contracts
-✅ **Execution tracking** - Monitor latency per trade
-✅ **Session stats** - Track trades, avg latency, fastest/slowest
-
 ## Quick Start
 
 ### 1. Install Dependencies
@@ -67,27 +55,13 @@ Then open `http://YOUR_IP:5000` on your phone browser.
 
 ### Trading Phase
 
-1. **Witness event** - See run scored or major play
-2. **Select position size** - Tap preset (default: 1500)
+1. **Witness event** - See run scored or major play capable of swaying predicted outcome by more than 5%:
+2. **Select position size** - Tap preset or enter position sizing
 3. **Execute** - Tap BUY YES / BUY NO within 1 second
 4. **Wait 5-20 seconds** - Watch for price movement
 5. **Exit** - Tap SELL YES / SELL NO when target hit
 6. **Repeat** - Wait 10-30 seconds, then repeat
 
-### Between Innings
-
-- Review session stats
-- Check battery level
-- Verify internet connection
-- Reset focus for next inning
-
-## Critical Performance Targets
-
-- **Execution latency**: <500ms (shown in UI)
-- **Hold time**: 5-20 seconds per trade
-- **Profit target**: 3-7¢ per contract
-- **Stop loss**: -2¢ per contract
-- **Max trades per game**: 8 trades
 
 ## Risk Management
 
@@ -96,12 +70,12 @@ Then open `http://YOUR_IP:5000` on your phone browser.
 - Stop losses: Use strategically (e.g., -2¢ price move)
 - Monitor PAL: Be aware of $25K Position Accountability Level
 - Track performance: Monitor win rate and P&L throughout session
-- Take breaks: Stop trading if feeling emotional or after consecutive losses
 
 ## Troubleshooting
 
 ### Slow Execution (>500ms)
 - Switch from WiFi to mobile data (or vice versa)
+- Use linked 5g hotspot, try different carriers.
 - Reduce position sizes by 50%
 - If persists >2 seconds, stop trading (edge is gone)
 
@@ -115,16 +89,6 @@ Then open `http://YOUR_IP:5000` on your phone browser.
 - Only trade if >500 contracts available
 - Reduce position size to match liquidity
 
-### Battery <50%
-- Connect portable charger immediately
-- Reduce screen brightness
-- Close unnecessary apps
-
-### Battery <20%
-- Close all positions
-- Stop trading
-- Conserve battery
-
 ## Files
 
 - `kalshi_client.py` - High-performance Kalshi API client
@@ -134,27 +98,12 @@ Then open `http://YOUR_IP:5000` on your phone browser.
 - `requirements.txt` - Python dependencies
 - `.env` - Credentials (you create this)
 
-## Technology Stack
+## Stack
 
 - **Backend**: Python + Flask
 - **Client**: kalshi-python SDK (modified for speed)
 - **Frontend**: Vanilla JS (no frameworks = faster)
-- **Design**: Mobile-first, touch-optimized
-
-## Success Metrics
-
-### Good Performance
-- P&L: $200-$400 per game
-- Win rate: 60-70%
-- Avg latency: <500ms
-- 4-6 trades executed
-
-### Excellent Performance
-- P&L: $500-$1,000 per game
-- Win rate: 70-80%
-- Avg latency: <400ms
-- 5-8 trades executed
-- All trades within risk limits
+- **Design**: Mobile-first, touch-optimized, keyboard bind supported
 
 ## Security
 
